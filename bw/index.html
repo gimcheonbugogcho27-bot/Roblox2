@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#10172b">
+  <title>블록월드 2 | 게임 플레이</title>
+</head>
+<body>
+  <div id="app">
+    <main id="launcher" class="launcher">
+      <header class="nav">
+        <div class="brand"><span class="brand-logo">B</span><div><b>BLOCKWORLD 2</b><small>PLAY · CREATE · CONNECT</small></div></div>
+        <div class="nav-right">
+          <span id="online-status" class="status"><i></i> 연결 준비 중</span>
+          <span id="online-count" class="online-count">0명 온라인</span>
+          <span id="platform-account" class="online-count">로그아웃</span>
+          <button id="platform-logout" class="nav-btn hidden">로그아웃</button>
+          <button id="change-room" class="nav-btn">월드 변경</button>
+        </div>
+      </header>
+      <section class="welcome">
+        <div class="welcome-copy"><span class="kicker">나만의 게임 플랫폼</span><h1>오늘은 어떤 게임을<br><em>플레이할까요?</em></h1><p>게임을 선택하고 바로 시작하세요. 친구들과 같은 월드에 접속해 채팅할 수 있습니다.</p></div>
+        <div class="welcome-art" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="cube cube-a"></div><div class="cube cube-b"></div><div class="cube cube-c"></div></div>
+      </section>
+      <section class="room-strip">
+        <div><span class="room-label">현재 월드</span><b id="room-name">CLASS4</b></div>
+        <div><span class="room-label">내 플레이어 이름</span><b id="player-label">플레이어</b></div>
+        <div class="room-tip">친구도 같은 월드 코드로 입장하면 함께 온라인 상태를 확인할 수 있어요.</div>
+      </section>
+      <section class="games-section">
+        <div class="section-head"><div><span class="kicker">GAME LIBRARY</span><h2>게임 목록</h2></div><span id="game-count" class="game-count">9 GAMES</span></div>
+        <div class="game-grid">
+          <button class="game-card" data-game="speed">
+            <div class="game-cover speed-cover"><span class="cover-tag">OBBY</span><div class="speed-scene"><span>+1</span><i></i><b></b></div></div>
+            <div class="game-info"><div><h3>스피드 키보드 탈출 3D</h3><p>152개 맵 · 5개 갤럭시 월드 · 신규 장애물과 보스전!</p></div><span class="play-arrow">▶</span></div>
+          </button>
+          <button class="game-card" data-game="egg">
+            <div class="game-cover egg-cover"><span class="cover-tag">SIMULATOR</span><div class="egg-scene"><span>🥚</span><i>🥚</i><b>🥚</b></div></div>
+            <div class="game-info"><div><h3>계란 서리단</h3><p>알을 모으고 훈련해 나만의 아지트를 키우세요.</p></div><span class="play-arrow">▶</span></div>
+          </button>
+          <button class="game-card" data-game="rivals">
+            <div class="game-cover rivals-cover"><span class="cover-tag">ACTION</span><div class="rivals-scene"><span>RIVALS</span><i></i><b></b></div></div>
+            <div class="game-info"><div><h3>RIVALS 3D</h3><p>아레나에서 전투를 시작하세요.</p></div><span class="play-arrow">▶</span></div>
+          </button>
+          <button class="game-card" data-game="blockblast">
+            <div class="game-cover block-cover"><span class="cover-tag">PUZZLE</span><div class="block-scene"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+            <div class="game-info"><div><h3>블록 블라스트</h3><p>블록을 배치해 가로줄과 세로줄을 완성하세요.</p></div><span class="play-arrow">▶</span></div>
+          </button>
+          <button class="game-card" data-game="tower"><div class="game-cover" style="background:linear-gradient(160deg,#4ade80,#facc15 30%,#f472b6 55%,#818cf8 75%,#0f172a)"><span class="cover-tag">OBBY</span><div style="font-size:64px">🗼</div></div><div class="game-info"><div><h3>아무도 못 깨는 타워</h3><p>10층 점프맵 타워! 빨간 블록을 피해 꼭대기까지 올라가세요.</p></div><span class="play-arrow">▶</span></div></button>
+          <button class="game-card" data-game="forest99"><div class="game-cover" style="background:linear-gradient(145deg,#102d22,#6b5736)"><span class="cover-tag">SURVIVAL</span><div style="font-size:64px">🌲</div></div><div class="game-info"><div><h3>99 Nights in the Forest</h3><p>모닥불을 지키며 숲에서 99밤 생존하세요.</p></div><span class="play-arrow">▶</span></div></button>
+        </div>
+      </section>
+      <footer>BLOCKWORLD 2 <span>·</span> 게임 소스는 제공된 파일에서 추출했습니다.</footer>
+    </main>
+
+    <section id="room-modal" class="modal">
+      <form id="room-form" class="modal-card">
+        <div class="modal-mark">B</div><span class="kicker">BLOCKWORLD ACCOUNT</span><h2>플랫폼 로그인</h2><p>한 번 로그인하면 BLOCKWORLD 2의 모든 게임에서 같은 계정을 사용합니다. 계정별 게임 저장 데이터도 연결됩니다.</p>
+        <div id="account-status" class="account-status">로그인되지 않음</div>
+        <label for="account-email">학생 ID</label><input id="account-email" type="text" autocomplete="username" placeholder="예: 김예은">
+        <label for="account-password">비밀번호</label><input id="account-password" type="password" autocomplete="current-password" minlength="6" placeholder="비밀번호 (6자 이상)">
+        <div class="auth-actions"><button type="button" id="auth-login">로그인</button><button type="button" id="auth-signup">학생 계정 일괄 준비</button></div><div id="auth-error" class="error"></div>
+        <label for="player-name">플레이어 이름</label><input id="player-name" maxlength="16" value="플레이어" required>
+        <label for="room-code">월드 코드</label><input id="room-code" maxlength="16" value="CLASS4" required>
+        <button class="primary" type="submit">입장하기</button><div id="room-error" class="error"></div>
+      </form>
+    </section>
+
+    <section id="game-view" class="game-view hidden">
+      <div class="game-topbar"><button id="back-games" class="back-btn">← 게임 목록</button><b id="active-game-title">게임</b><span id="game-online">온라인 0명</span></div>
+      <iframe id="game-frame" title="선택한 게임" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+      <aside class="game-chat">
+        <div class="chat-head"><b>월드 채팅</b><button id="chat-toggle" aria-label="채팅 접기">−</button></div>
+        <div id="chat-body"><div id="chat-messages"></div><form id="chat-form"><input id="chat-input" maxlength="100" placeholder="메시지 입력..." autocomplete="off"><button>전송</button></form></div>
+      </aside>
+    </section>
+    <div id="toast" class="toast"></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

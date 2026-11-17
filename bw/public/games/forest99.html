@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>99밤 숲속 생존 3D</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:-apple-system,"Noto Sans KR",sans-serif;color:#fff}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#hud{position:fixed;top:max(6px,env(safe-area-inset-top));left:8px;right:8px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;font-size:12px;z-index:3}
+.bars{width:150px}
+.bar{height:12px;background:rgba(0,0,0,.55);border-radius:6px;margin-bottom:4px;overflow:hidden;position:relative}
+.bar i{display:block;height:100%;width:50%}
+.bar span{position:absolute;left:6px;top:-1px;font-size:10px;line-height:13px}
+#hp i{background:#e5484d}#hg i{background:#f5a524}#fu i{background:#ff7a1a}#tm i{background:#7aa7ff}
+#mid{text-align:center;text-shadow:0 1px 3px #000}
+#mid b{font-size:15px}
+#inv{background:rgba(0,0,0,.5);padding:5px 8px;border-radius:8px;line-height:1.5;text-align:right;white-space:nowrap}
+#spd{pointer-events:auto;margin-top:4px;background:rgba(0,0,0,.6);border:1px solid #888;color:#fff;border-radius:8px;padding:4px 10px;font-size:12px}
+#zl{position:fixed;left:0;top:70px;bottom:0;width:48%;z-index:2}
+#zr{position:fixed;right:0;top:70px;bottom:0;width:52%;z-index:2}
+#jb{position:fixed;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);display:none;pointer-events:none;z-index:4}
+#jk{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.55)}
+#btns{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));width:190px;height:190px;z-index:4}
+.b{position:absolute;border-radius:50%;border:2px solid rgba(255,255,255,.5);background:rgba(30,30,30,.55);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1}
+.b small{font-size:10px;margin-top:2px}
+.b:active,.b.on{background:rgba(255,255,255,.35)}
+#bA{width:84px;height:84px;right:0;bottom:0;background:rgba(200,50,50,.55)}
+#bE{width:64px;height:64px;right:92px;bottom:6px}
+#bF{width:60px;height:60px;right:2px;bottom:96px}
+#bM{width:60px;height:60px;right:70px;bottom:104px}
+#menu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,340px);background:rgba(15,20,15,.94);border:1px solid #6a8;border-radius:14px;padding:12px;display:none;flex-direction:column;gap:6px;z-index:8;max-height:80vh;overflow:auto}
+#menu h3{margin:0 0 4px;font-size:15px;text-align:center}
+#menu button,.big{background:#2d5a36;color:#fff;border:1px solid #8c9;border-radius:10px;padding:10px;font-size:14px;text-align:left}
+#menu button[disabled]{opacity:.4}
+#menu button small{display:block;opacity:.8;font-size:11px}
+#banner{position:fixed;left:0;right:0;top:26%;text-align:center;font-size:26px;font-weight:700;text-shadow:0 2px 8px #000;pointer-events:none;opacity:0;transition:opacity .5s;z-index:6}
+#flash{position:fixed;inset:0;background:#f00;opacity:0;pointer-events:none;z-index:5}
+.ft{position:fixed;left:0;top:0;font-weight:700;font-size:14px;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none;white-space:nowrap;z-index:3}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;z-index:10}
+#ov h1{margin:0 0 8px;font-size:28px}
+#ov p{max-width:420px;font-size:13px;line-height:1.6;opacity:.9}
+.big{text-align:center;font-size:18px;padding:12px 30px;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="bars">
+    <div class="bar" id="hp"><i></i><span>체력</span></div>
+    <div class="bar" id="hg"><i></i><span>배고픔</span></div>
+    <div class="bar" id="fu"><i></i><span>모닥불</span></div>
+  </div>
+  <div id="mid"><b id="nt">생존한 밤 0/99</b><div class="bar" id="tm" style="width:130px;margin:4px auto"><i></i><span id="tl">☀️ 낮</span></div><div id="kd"></div></div>
+  <div style="text-align:right"><div id="inv"></div><button id="spd">⏩ x1</button></div>
+</div>
+<div id="zl"></div><div id="zr"></div>
+<div id="jb"><div id="jk"></div></div>
+<div id="btns">
+  <div class="b" id="bA">⚔️<small>공격</small></div>
+  <div class="b" id="bE">✋<small>행동</small></div>
+  <div class="b" id="bF">🍖<small>먹기</small></div>
+  <div class="b" id="bM">🛠<small>제작</small></div>
+</div>
+<div id="menu"></div>
+<div id="banner"></div>
+<div id="flash"></div>
+<div id="ov">
+  <h1>🌲 99밤 숲속 생존 3D</h1>
+  <p id="ovp">모닥불을 지키며 99번의 밤을 버티세요.<br>나무·돌을 모으고, 열매와 고기로 배고픔을 해결하고, 숲에 갇힌 아이들을 구출해 모닥불로 데려오세요.<br>불빛 안쪽은 몬스터가 들어오지 못합니다. 장작이 꺼지지 않게 하세요!<br><br>
+  <b>조작</b>: 왼쪽 드래그 = 이동 / 오른쪽 드래그 = 시점 회전 / ⚔️ 공격·채집(자동 조준) / ✋ 구출·열매·장작 / 🍖 먹기 / 🛠 제작<br>PC: WASD 이동, 오른쪽 화면 마우스 드래그 시점, 스페이스 공격, E 행동, F 먹기, Q 제작</p>
+  <button class="big" id="start">게임 시작</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+if(typeof THREE==='undefined'){$('ovp').innerHTML='3D 엔진(Three.js)을 불러오지 못했어요.<br>인터넷 연결을 확인하고 다시 열어주세요.';$('start').style.display='none';return}
+
+const WS=300,CYC=60,WIN=99,CEN=WS/2;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ---------- three setup ---------- */
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
+document.body.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(60,1,.1,400);
+let W=innerWidth,H=innerHeight;
+function resize(){W=innerWidth;H=innerHeight;renderer.setSize(W,H);camera.aspect=W/H;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+
+const skyDay=new THREE.Color(0x8fcdf5),skyNight=new THREE.Color(0x03050f);
+scene.background=skyDay.clone();scene.fog=new THREE.Fog(0x8fcdf5,40,140);
+const hemi=new THREE.HemisphereLight(0xffffff,0x3a5a3a,1);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff2d0,1.2);sun.position.set(60,90,30);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-90;sun.shadow.camera.right=90;sun.shadow.camera.top=90;sun.shadow.camera.bottom=-90;scene.add(sun);
+
+// ground
+{const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+ g.fillStyle='#3b7a3c';g.fillRect(0,0,128,128);
+ for(let i=0;i<900;i++){g.fillStyle=`hsl(${105+Math.random()*25},${40+Math.random()*20}%,${22+Math.random()*16}%)`;g.fillRect(Math.random()*128,Math.random()*128,2,2)}
+ const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(WS/6,WS/6);
+ const m=new THREE.Mesh(new THREE.PlaneGeometry(WS+200,WS+200).rotateX(-Math.PI/2),new THREE.MeshLambertMaterial({map:t}));
+ m.position.set(CEN,0,CEN);m.material.map.repeat.set((WS+200)/6,(WS+200)/6);m.receiveShadow=true;scene.add(m);
+ const camp=new THREE.Mesh(new THREE.CircleGeometry(5.5,24).rotateX(-Math.PI/2),new THREE.MeshLambertMaterial({color:0x5a432c}));
+ camp.position.set(CEN,.03,CEN);scene.add(camp);
+ // world border
+ const wm=new THREE.MeshLambertMaterial({color:0x0b1a0b,flatShading:true});
+ for(let i=0;i<90;i++){const a=i/90*6.283,r=WS*.5*1.42+rnd(0,6);
+   const cone=new THREE.Mesh(new THREE.ConeGeometry(rnd(10,18),rnd(25,45),5),wm);
+   cone.position.set(CEN+Math.cos(a)*r,10,CEN+Math.sin(a)*r);scene.add(cone)}}
+
+// materials / geometries
+const mat=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c,flatShading:true},o||{}));
+const gTrunk=new THREE.CylinderGeometry(.28,.38,1.8,6),gC1=new THREE.ConeGeometry(1.9,3.2,7),gC2=new THREE.ConeGeometry(1.45,2.6,7);
+const MAXT=300;
+const iTrunk=new THREE.InstancedMesh(gTrunk,mat(0x6b4426),MAXT),iC1=new THREE.InstancedMesh(gC1,mat(0x1f6a2e),MAXT),iC2=new THREE.InstancedMesh(gC2,mat(0x2a8a3c),MAXT);
+for(const m of [iTrunk,iC1,iC2]){m.frustumCulled=false;m.castShadow=true;m.receiveShadow=true;scene.add(m)}
+const dummy=new THREE.Object3D();
+const gRock=new THREE.DodecahedronGeometry(1,0),mRock=mat(0x8a8e92);
+
+// fire
+const fireG=new THREE.Group();fireG.position.set(CEN,0,CEN);scene.add(fireG);
+{const lm=mat(0x5a3a1a);for(let i=0;i<4;i++){const l=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,2.4,6),lm);l.rotation.z=Math.PI/2;l.rotation.y=i*Math.PI/4;l.position.y=.25;fireG.add(l)}
+ for(let i=0;i<10;i++){const s=new THREE.Mesh(new THREE.DodecahedronGeometry(.4,0),mRock);const a=i/10*6.283;s.position.set(Math.cos(a)*1.9,.2,Math.sin(a)*1.9);fireG.add(s)}}
+const flame1=new THREE.Mesh(new THREE.ConeGeometry(.9,2.4,7),new THREE.MeshBasicMaterial({color:0xff6a00}));flame1.position.y=1.5;fireG.add(flame1);
+const flame2=new THREE.Mesh(new THREE.ConeGeometry(.5,1.6,7),new THREE.MeshBasicMaterial({color:0xffd23a}));flame2.position.y=1.1;fireG.add(flame2);
+const fireLight=new THREE.PointLight(0xff8a33,2,50);fireLight.position.set(CEN,3,CEN);scene.add(fireLight);
+const ring=new THREE.Mesh(new THREE.RingGeometry(.97,1,48).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xffc060,transparent:true,opacity:.45,side:THREE.DoubleSide}));
+ring.position.set(CEN,.08,CEN);scene.add(ring);
+
+// player mesh
+const pMesh=new THREE.Group();
+const pBody=new THREE.Group();pMesh.add(pBody);
+{const b=new THREE.Mesh(new THREE.CylinderGeometry(.55,.65,1.4,8),mat(0x3a7bd5));b.position.y=1.1;pBody.add(b);
+ const h=new THREE.Mesh(new THREE.SphereGeometry(.5,10,8),mat(0xffd7a8));h.position.y=2.05;pBody.add(h);
+ const hat=new THREE.Mesh(new THREE.ConeGeometry(.55,.5,8),mat(0xd05a2a));hat.position.y=2.55;pBody.add(hat);
+ const eyeM=new THREE.MeshBasicMaterial({color:0x222222});
+ for(const x of[-.18,.18]){const e=new THREE.Mesh(new THREE.SphereGeometry(.06,6,6),eyeM);e.position.set(x,2.1,.46);pBody.add(e)}
+ for(const x of[-.22,.22]){const l=new THREE.Mesh(new THREE.BoxGeometry(.3,.5,.3),mat(0x2a3a5a));l.position.set(x,.25,0);pBody.add(l)}}
+const arm=new THREE.Group();arm.position.set(.7,1.5,0);pBody.add(arm);
+{const a=new THREE.Mesh(new THREE.BoxGeometry(.25,.8,.25),mat(0x3a7bd5));a.position.y=-.3;arm.add(a);
+ const sw=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,1.6),mat(0xcccccc));sw.position.set(0,-.7,.8);arm.add(sw)}
+scene.add(pMesh);
+
+/* ---------- state ---------- */
+let G,P,F,inv,trees,rocks,bushes,kids,enemies,fts,over=false,started=false,speed=1,menuOpen=false,treesDirty=true;
+const ET={
+  wolf:{hp:22,spd:9,dmg:8,r:1,c:0x9a9a9a},
+  bear:{hp:80,spd:6,dmg:18,r:1.8,c:0x7a4a24},
+  stalker:{hp:38,spd:12,dmg:12,r:1.15,c:0x5b2a7a},
+  boss:{hp:420,spd:7,dmg:30,r:3.2,c:0xa01818}
+};
+const safeR=()=>F.fuel>0?11+F.lvl*2.5:0;
+const lightR=()=>F.fuel>0?(11+F.lvl*2.5)*2.4:5;
+const maxFuel=()=>100+F.lvl*40;
+function freePos(minD){let x,z,k=0;do{x=rnd(8,WS-8);z=rnd(8,WS-8);k++}while(Math.hypot(x-CEN,z-CEN)<minD&&k<60);return{x,z}}
+function addTree(){const p=freePos(17);trees.push({...p,hp:4,s:rnd(.85,1.35),sh:0});treesDirty=true}
+function addRock(){const p=freePos(17);const s=rnd(.9,1.5);const m=new THREE.Mesh(gRock,mRock);m.scale.set(1.2*s,.9*s,1.0*s);m.position.set(p.x,.6*s,p.z);m.rotation.y=Math.random()*6;scene.add(m);rocks.push({...p,hp:6,s,sh:0,mesh:m})}
+function addBush(){const p=freePos(20);const g=new THREE.Group();g.position.set(p.x,0,p.z);
+  const b=new THREE.Mesh(new THREE.SphereGeometry(1.2,8,6),mat(0x2a7a30));b.position.y=.8;b.scale.y=.8;g.add(b);
+  const bg=new THREE.Group();const bm=new THREE.MeshBasicMaterial({color:0xe0408a});
+  for(let i=0;i<6;i++){const s=new THREE.Mesh(new THREE.SphereGeometry(.16,6,6),bm);s.position.set(Math.cos(i*1.1)*1,.9+Math.sin(i*2)*.3,Math.sin(i*1.1)*1);bg.add(s)}
+  g.add(bg);scene.add(g);bushes.push({...p,t:0,mesh:g,berries:bg})}
+function addKid(){const p=freePos(70);const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(.35,.4,.9,8),mat(0xff9ec0));body.position.y=.6;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.34,8,8),mat(0xffe0cc));head.position.y=1.3;g.add(head);
+  const cage=new THREE.Mesh(new THREE.BoxGeometry(2.4,2.4,2.4),new THREE.MeshBasicMaterial({color:0xc9b79a,wireframe:true}));cage.position.y=1.2;g.add(cage);
+  g.position.set(p.x,0,p.z);scene.add(g);kids.push({...p,st:'cage',ang:Math.random()*6.28,mesh:g,cage})}
+function clearScene(){
+  if(rocks)for(const r of rocks)scene.remove(r.mesh);
+  if(bushes)for(const b of bushes)scene.remove(b.mesh);
+  if(kids)for(const k of kids)scene.remove(k.mesh);
+  if(enemies)for(const e of enemies)scene.remove(e.root);
+  if(fts)for(const f of fts)f.el.remove();
+}
+function newGame(){
+  clearScene();
+  G={time:0,p:0,night:0,survived:0,rescued:0,spawnT:0,flash:0};
+  P={x:CEN+6,z:CEN+6,r:.8,hp:100,max:100,hunger:100,cd:0,sw:0,fx:0,fz:1,wl:0,al:0,hurtT:9,yaw:0,pitch:.55};
+  F={fuel:80,lvl:0,out:0};
+  inv={wood:5,stone:0,raw:0,cooked:0,berry:0};
+  trees=[];rocks=[];bushes=[];kids=[];enemies=[];fts=[];over=false;
+  for(let i=0;i<200;i++)addTree();
+  for(let i=0;i<45;i++)addRock();
+  for(let i=0;i<35;i++)addBush();
+  for(let i=0;i<5;i++)addKid();
+  treesDirty=true;
+}
+function updateTrees(){
+  trees.forEach((t,i)=>{
+    const sh=t.sh>0?Math.sin(t.sh*70)*.06:0,s=t.s;
+    dummy.rotation.set(0,0,sh);dummy.scale.setScalar(s);
+    dummy.position.set(t.x,.9*s,t.z);dummy.updateMatrix();iTrunk.setMatrixAt(i,dummy.matrix);
+    dummy.position.set(t.x,3*s,t.z);dummy.updateMatrix();iC1.setMatrixAt(i,dummy.matrix);
+    dummy.position.set(t.x,4.5*s,t.z);dummy.updateMatrix();iC2.setMatrixAt(i,dummy.matrix);
+  });
+  iTrunk.count=iC1.count=iC2.count=trees.length;
+  iTrunk.instanceMatrix.needsUpdate=iC1.instanceMatrix.needsUpdate=iC2.instanceMatrix.needsUpdate=true;
+}
+function makeEnemy(type){
+  const T=ET[type],root=new THREE.Group(),body=new THREE.Group();
+  const m=mat(T.c);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(1,.9,1.8),m);b.position.y=.95;body.add(b);
+  const h=new THREE.Mesh(new THREE.BoxGeometry(.85,.75,.85),m);h.position.set(0,1.25,1.1);body.add(h);
+  for(const x of[-.3,.3]){const e=new THREE.Mesh(new THREE.ConeGeometry(.16,.4,4),mat(0x111111));e.position.set(x,1.8,1.0);body.add(e);
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.09,6,6),new THREE.MeshBasicMaterial({color:0xff2222}));eye.position.set(x*.8,1.35,1.52);body.add(eye)}
+  for(const x of[-.35,.35])for(const z of[-.6,.6]){const l=new THREE.Mesh(new THREE.BoxGeometry(.25,.6,.25),m);l.position.set(x,.3,z);body.add(l)}
+  if(type==='boss')for(const x of[-.4,.4]){const hn=new THREE.Mesh(new THREE.ConeGeometry(.12,.8,5),mat(0xeeeecc));hn.position.set(x,2.0,1.05);hn.rotation.z=-x*1.2;body.add(hn)}
+  body.scale.setScalar(T.r);root.add(body);
+  const bar=new THREE.Group();bar.position.y=2.6*T.r+.4;
+  const bg=new THREE.Mesh(new THREE.PlaneGeometry(1.6,.2),new THREE.MeshBasicMaterial({color:0x000000,depthTest:false}));
+  const fg=new THREE.Mesh(new THREE.PlaneGeometry(1.6,.2),new THREE.MeshBasicMaterial({color:0xee4444,depthTest:false}));fg.position.z=.01;
+  bg.renderOrder=10;fg.renderOrder=11;bar.add(bg);bar.add(fg);bar.scale.setScalar(Math.max(1,T.r*.8));root.add(bar);
+  scene.add(root);return{root,body,bar,fg};
+}
+
+/* ---------- ui helpers ---------- */
+const tmpV=new THREE.Vector3();
+function ft(x,y,z,txt,c){const el=document.createElement('div');el.className='ft';el.textContent=txt;el.style.color=c||'#fff';document.body.appendChild(el);fts.push({x,y,z,t:1.3,el})}
+let bT;function banner(t){const b=$('banner');b.textContent=t;b.style.opacity=1;clearTimeout(bT);bT=setTimeout(()=>b.style.opacity=0,2600)}
+
+/* ---------- input ---------- */
+const joy={id:null,ox:0,oy:0,x:0,y:0};
+const zl=$('zl'),zr=$('zr'),jb=$('jb'),jk=$('jk');
+zl.addEventListener('pointerdown',e=>{
+  if(joy.id!==null)return;joy.id=e.pointerId;joy.ox=e.clientX;joy.oy=e.clientY;joy.x=joy.y=0;
+  jb.style.display='block';jb.style.left=(e.clientX-55)+'px';jb.style.top=(e.clientY-55)+'px';jk.style.transform='';
+  zl.setPointerCapture(e.pointerId);e.preventDefault()});
+zl.addEventListener('pointermove',e=>{
+  if(e.pointerId!==joy.id)return;
+  let dx=e.clientX-joy.ox,dy=e.clientY-joy.oy;const l=Math.hypot(dx,dy),m=50;
+  if(l>m){dx*=m/l;dy*=m/l}
+  joy.x=dx/m;joy.y=dy/m;jk.style.transform=`translate(${dx}px,${dy}px)`;e.preventDefault()});
+const endJoy=e=>{if(e.pointerId!==joy.id)return;joy.id=null;joy.x=joy.y=0;jb.style.display='none'};
+zl.addEventListener('pointerup',endJoy);zl.addEventListener('pointercancel',endJoy);
+const look={id:null,x:0,y:0};
+zr.addEventListener('pointerdown',e=>{if(look.id!==null)return;look.id=e.pointerId;look.x=e.clientX;look.y=e.clientY;zr.setPointerCapture(e.pointerId);e.preventDefault()});
+zr.addEventListener('pointermove',e=>{if(e.pointerId!==look.id||!P)return;
+  P.yaw-=(e.clientX-look.x)*.007;P.pitch=clamp(P.pitch+(e.clientY-look.y)*.004,.15,1.2);look.x=e.clientX;look.y=e.clientY;e.preventDefault()});
+const endLook=e=>{if(e.pointerId===look.id)look.id=null};
+zr.addEventListener('pointerup',endLook);zr.addEventListener('pointercancel',endLook);
+
+let atkHeld=false;const keys={};
+function hold(id,down,up){const el=$(id);
+  el.addEventListener('pointerdown',e=>{e.preventDefault();el.classList.add('on');el.setPointerCapture(e.pointerId);down()});
+  const u=()=>{el.classList.remove('on');up&&up()};
+  el.addEventListener('pointerup',u);el.addEventListener('pointercancel',u)}
+hold('bA',()=>atkHeld=true,()=>atkHeld=false);
+hold('bE',()=>doAction());hold('bF',()=>eat());hold('bM',()=>toggleMenu());
+$('spd').addEventListener('click',()=>{speed=speed%3+1;$('spd').textContent='⏩ x'+speed});
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;
+  if(k===' ')atkHeld=true;if(k==='e')doAction();if(k==='f')eat();if(k==='q')toggleMenu()});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();keys[k]=0;if(k===' ')atkHeld=false});
+{let md=false,lx=0,ly=0;
+ zr.addEventListener('mousedown',e=>{md=true;lx=e.clientX;ly=e.clientY});
+ addEventListener('mouseup',()=>md=false);
+ addEventListener('mousemove',e=>{if(!md||!P||e.buttons===0)return;P.yaw-=(e.clientX-lx)*.006;P.pitch=clamp(P.pitch+(e.clientY-ly)*.004,.15,1.2);lx=e.clientX;ly=e.clientY})}
+document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+/* ---------- actions ---------- */
+function nearFire(){return dist(P,F0)<safeR()+6||dist(P,F0)<12}
+const F0={x:CEN,z:CEN};
+function attack(){
+  if(P.cd>0)return;P.cd=.35;P.sw=.25;
+  let best=null,bd=1e9,kind='';
+  for(const e of enemies){const d=dist(P,e)-e.r;if(d<4&&d<bd){bd=d;best=e;kind='e'}}
+  if(!best){
+    for(const t of trees){const d=dist(P,t)-.5*t.s;if(d<3&&d<bd){bd=d;best=t;kind='t'}}
+    for(const r of rocks){const d=dist(P,r)-1.1*r.s;if(d<3&&d<bd){bd=d;best=r;kind='r'}}
+  }
+  if(!best)return;
+  const dx=best.x-P.x,dz=best.z-P.z,l=Math.hypot(dx,dz)||1;P.fx=dx/l;P.fz=dz/l;
+  if(kind==='e'){
+    const dm=10+P.wl*6;best.hp-=dm;best.kb=.15;best.kx=P.fx*24;best.kz=P.fz*24;ft(best.x,best.r*2.4,best.z,'-'+dm,'#ffd34d');
+    if(best.hp<=0)killEnemy(best);
+  }else if(kind==='t'){
+    best.hp-=1+P.al*.45;best.sh=.25;treesDirty=true;
+    if(best.hp<=0){const n=2+Math.floor(Math.random()*2)+Math.floor(P.al/3);inv.wood+=n;ft(best.x,3,best.z,'+'+n+' 나무','#e6b077');trees.splice(trees.indexOf(best),1)}
+  }else{
+    best.hp-=1+P.al*.45;best.sh=.2;
+    if(best.hp<=0){const n=1+Math.floor(Math.random()*2)+Math.floor(P.al/4);inv.stone+=n;ft(best.x,2,best.z,'+'+n+' 돌','#ddd');scene.remove(best.mesh);rocks.splice(rocks.indexOf(best),1)}
+  }
+}
+function killEnemy(e){
+  scene.remove(e.root);enemies.splice(enemies.indexOf(e),1);
+  if(e.type==='boss'){inv.raw+=4;inv.wood+=10;inv.stone+=5;P.max+=20;P.hp=P.max;banner('숲의 왕을 쓰러뜨렸다!');ft(e.x,3,e.z,'+최대체력 20','#7f7')}
+  else{const n=e.type==='bear'?2:(Math.random()<.6?1:0);if(n){inv.raw+=n;ft(e.x,2,e.z,'+'+n+' 생고기','#f99')}}
+}
+function doAction(){
+  if(over||!started)return;
+  for(const k of kids)if(k.st==='cage'&&dist(P,k)<7){k.st='follow';k.mesh.remove(k.cage);ft(k.x,3,k.z,'아이를 구출했다!','#8ff');return}
+  for(const b of bushes)if(b.t<=0&&dist(P,b)<5){b.t=35;b.berries.visible=false;const n=1+Math.floor(Math.random()*2);inv.berry+=n;ft(b.x,2.5,b.z,'+'+n+' 열매','#f9b');return}
+  if(nearFire()&&inv.wood>0&&F.fuel<maxFuel()-5){inv.wood--;F.fuel=Math.min(maxFuel(),F.fuel+25);ft(CEN,4,CEN,'+장작','#fb6');return}
+  ft(P.x,3.2,P.z,'할 수 있는 행동이 없다','#bbb');
+}
+function eat(){
+  if(over||!started)return;
+  if(inv.cooked>0){inv.cooked--;P.hunger=Math.min(100,P.hunger+35);P.hp=Math.min(P.max,P.hp+5);ft(P.x,3.2,P.z,'맛있다! +35','#9f9')}
+  else if(inv.berry>0){inv.berry--;P.hunger=Math.min(100,P.hunger+15);ft(P.x,3.2,P.z,'+15','#9f9')}
+  else if(inv.raw>0){inv.raw--;P.hunger=Math.min(100,P.hunger+10);P.hp-=3;ft(P.x,3.2,P.z,'생고기... +10 / -3HP','#fb9')}
+  else ft(P.x,3.2,P.z,'먹을 것이 없다','#bbb');
+}
+function toggleMenu(){if(!started||over)return;menuOpen=!menuOpen;$('menu').style.display=menuOpen?'flex':'none';if(menuOpen)buildMenu()}
+function buildMenu(){
+  const m=$('menu');m.innerHTML='<h3>🛠 모닥불 제작</h3>';
+  const near=nearFire(),fireC=10+F.lvl*5,wS=5+P.wl*2,wW=4+P.wl*2,aS=3+P.al*2,fS=3+F.lvl*2;
+  const items=[
+    {t:'🪵 장작 넣기',s:'나무 1 · 연료 +25',ok:near&&inv.wood>0&&F.fuel<maxFuel()-5,f:()=>{inv.wood--;F.fuel=Math.min(maxFuel(),F.fuel+25)}},
+    {t:'🍖 고기 굽기',s:'생고기 → 구운 고기 (전부)',ok:near&&inv.raw>0,f:()=>{inv.cooked+=inv.raw;inv.raw=0}},
+    {t:`🔥 모닥불 강화 Lv${F.lvl}→${F.lvl+1}`,s:`나무 ${fireC} · 돌 ${fS} · 안전범위↑ 연료통↑`,ok:near&&F.lvl<8&&inv.wood>=fireC&&inv.stone>=fS,f:()=>{inv.wood-=fireC;inv.stone-=fS;F.lvl++;F.fuel=maxFuel()}},
+    {t:`🗡 무기 강화 Lv${P.wl}→${P.wl+1}`,s:`나무 ${wW} · 돌 ${wS} · 공격력 +6`,ok:near&&P.wl<10&&inv.wood>=wW&&inv.stone>=wS,f:()=>{inv.wood-=wW;inv.stone-=wS;P.wl++}},
+    {t:`🪓 도끼 강화 Lv${P.al}→${P.al+1}`,s:`돌 ${aS} · 채집 속도↑`,ok:near&&P.al<10&&inv.stone>=aS,f:()=>{inv.stone-=aS;P.al++}},
+    {t:'닫기',s:'',ok:true,f:null}
+  ];
+  if(!near){const d=document.createElement('div');d.style.cssText='font-size:12px;text-align:center;color:#fb8';d.textContent='모닥불 근처에서만 제작할 수 있어요';m.appendChild(d)}
+  for(const it of items){const b=document.createElement('button');b.innerHTML=it.t+(it.s?`<small>${it.s}</small>`:'');b.disabled=!it.ok;
+    b.onclick=()=>{if(it.f){it.f();buildMenu()}else toggleMenu()};m.appendChild(b)}
+}
+
+/* ---------- flow ---------- */
+function startNight(){G.night++;banner(`🌙 ${G.night}번째 밤`);if(G.night%10===0)spawnEnemy('boss')}
+function dawn(){
+  G.survived=G.night;for(const e of enemies)scene.remove(e.root);enemies.length=0;banner(`☀️ ${G.survived}번째 밤을 넘겼다!`);
+  for(let i=0;i<25&&trees.length<200;i++)addTree();
+  for(let i=0;i<4&&rocks.length<45;i++)addRock();
+  if(G.survived%5===0){const un=kids.filter(k=>k.st==='cage').length;for(let i=0;i<2&&un+i<6;i++)addKid()}
+  P.hp=Math.min(P.max,P.hp+15);
+  if(G.survived>=WIN)endGame(true);
+}
+function pickType(){const n=G.night,r=Math.random();if(n>=12&&r<.25)return'stalker';if(n>=4&&r<.45)return'bear';return'wolf'}
+function spawnEnemy(type){
+  const T=ET[type],a=Math.random()*6.283,d=rnd(42,60),sc=1+G.night*.03,o=makeEnemy(type);
+  enemies.push({type,x:clamp(P.x+Math.cos(a)*d,4,WS-4),z:clamp(P.z+Math.sin(a)*d,4,WS-4),hp:T.hp*sc,max:T.hp*sc,cd:0,kb:0,kx:0,kz:0,r:T.r,root:o.root,body:o.body,bar:o.bar,fg:o.fg,ry:0});
+}
+function endGame(win){
+  over=true;menuOpen=false;$('menu').style.display='none';
+  const o=$('ov');o.style.display='flex';
+  o.innerHTML=win?`<h1>🎉 99밤 생존 성공!</h1><p>구출한 아이들: ${G.rescued}명<br>당신은 숲의 전설이 되었습니다.</p><button class="big" id="again">다시 하기</button>`
+   :`<h1>💀 쓰러졌다...</h1><p>생존한 밤: ${G.survived}/99<br>구출한 아이들: ${G.rescued}명</p><button class="big" id="again">다시 도전</button>`;
+  $('again').onclick=()=>{o.style.display='none';newGame();started=true};
+}
+
+/* ---------- update ---------- */
+function update(dt){
+  if(over||!started)return;
+  dt*=speed;
+  G.time+=dt;const pp=G.p;G.p=(G.time%CYC)/CYC;
+  if(pp<.5&&G.p>=.5)startNight();
+  if(pp>G.p)dawn();
+  if(over)return;
+  const night=G.p>=.5;
+
+  // camera keys
+  if(keys.arrowleft)P.yaw+=1.8*dt;if(keys.arrowright)P.yaw-=1.8*dt;
+
+  let mx=joy.x,my=joy.y;
+  if(keys.a)mx-=1;if(keys.d)mx+=1;if(keys.w)my-=1;if(keys.s)my+=1;
+  const ml=Math.hypot(mx,my);if(ml>1){mx/=ml;my/=ml}
+  const sy=Math.sin(P.yaw),cy=Math.cos(P.yaw);
+  const sp=8*(P.hunger<=0?.7:1);
+  if(ml>.05){
+    const vx=mx*cy+my*sy,vz=-mx*sy+my*cy; // right*mx + back*my
+    P.x+=vx*sp*dt;P.z+=vz*sp*dt;
+    const l=Math.hypot(vx,vz)||1;P.fx=vx/l;P.fz=vz/l;
+  }
+  for(const t of trees){const dx=P.x-t.x,dz=P.z-t.z;if(Math.abs(dx)<4&&Math.abs(dz)<4){const d=Math.hypot(dx,dz),m=P.r+.5*t.s;if(d<m&&d>0){P.x=t.x+dx/d*m;P.z=t.z+dz/d*m}}}
+  for(const t of rocks){const dx=P.x-t.x,dz=P.z-t.z;if(Math.abs(dx)<4&&Math.abs(dz)<4){const d=Math.hypot(dx,dz),m=P.r+1.1*t.s;if(d<m&&d>0){P.x=t.x+dx/d*m;P.z=t.z+dz/d*m}}}
+  P.x=clamp(P.x,1,WS-1);P.z=clamp(P.z,1,WS-1);
+  P.cd-=dt;P.sw-=dt;P.hurtT+=dt;G.flash=Math.max(0,G.flash-dt);
+  if(atkHeld)attack();
+  P.hunger=Math.max(0,P.hunger-.4*dt);
+  if(P.hunger<=0)P.hp-=2*dt;
+  else if(P.hunger>40&&P.hurtT>3&&P.hp<P.max)P.hp=Math.min(P.max,P.hp+1.5*dt);
+  if(P.hp<=0){P.hp=0;endGame(false);return}
+
+  F.fuel=Math.max(0,F.fuel-(.8+F.lvl*.05)*dt);
+  if(F.fuel<=0&&!F.out){F.out=1;banner('🔥 모닥불이 꺼졌다!')}
+  if(F.fuel>0)F.out=0;
+
+  for(const b of bushes)if(b.t>0){b.t-=dt;if(b.t<=0)b.berries.visible=true}
+  for(const t of trees)if(t.sh>0){t.sh-=dt;treesDirty=true}
+  for(const t of rocks)if(t.sh>0)t.sh-=dt;
+
+  if(night){
+    G.spawnT-=dt;
+    const cap=Math.min(30,4+Math.floor(G.night*.6));
+    if(G.spawnT<=0&&enemies.length<cap){G.spawnT=Math.max(1.2,5-G.night*.04);spawnEnemy(pickType())}
+  }
+
+  const sr=safeR();
+  for(const e of enemies){
+    const T=ET[e.type];
+    if(e.kb>0){e.kb-=dt;e.x+=e.kx*dt;e.z+=e.kz*dt}
+    else{
+      const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1;
+      e.ry=Math.atan2(dx,dz);
+      if(d>e.r+P.r){const s=T.spd*(1+G.night*.004);e.x+=dx/d*s*dt;e.z+=dz/d*s*dt}
+    }
+    if(sr>0){const fx=e.x-CEN,fz=e.z-CEN,fd=Math.hypot(fx,fz)||1;if(fd<sr+e.r){e.x=CEN+fx/fd*(sr+e.r);e.z=CEN+fz/fd*(sr+e.r)}}
+    e.cd-=dt;
+    if(e.cd<=0&&dist(e,P)<e.r+P.r+.7){
+      const dm=T.dmg*(1+G.night*.01);P.hp-=dm;P.hurtT=0;G.flash=.3;e.cd=1;
+      ft(P.x,3.4,P.z,'-'+Math.round(dm),'#f55');
+      const dx=P.x-e.x,dz=P.z-e.z,d=Math.hypot(dx,dz)||1;P.x+=dx/d*2.2;P.z+=dz/d*2.2;
+    }
+  }
+
+  let idx=0;
+  for(const k of kids){
+    if(k.st==='follow'){
+      const tx=P.x-P.fx*2.6,tz=P.z-P.fz*2.6,dx=tx-k.x,dz=tz-k.z,d=Math.hypot(dx,dz);
+      if(d>1.5){const s=Math.min(d*3,14);k.x+=dx/d*s*dt;k.z+=dz/d*s*dt;k.mesh.rotation.y=Math.atan2(dx,dz)}
+      if(dist(k,F0)<sr&&F.fuel>0){k.st='saved';G.rescued++;P.max+=10;P.hp=P.max;inv.wood+=8;banner('👧 아이를 안전하게 데려왔다! 최대체력 +10')}
+    }else if(k.st==='saved'){
+      k.ang+=dt*.15;const a=k.ang+idx*1.3;idx++;const rr=6+(idx%3)*1.4;
+      k.x=CEN+Math.cos(a)*rr;k.z=CEN+Math.sin(a)*rr;k.mesh.rotation.y=Math.atan2(CEN-k.x,CEN-k.z);
+    }
+  }
+  for(const f of fts){f.t-=dt;f.y+=1.6*dt}
+  fts=fts.filter(f=>{if(f.t<=0){f.el.remove();return false}return true});
+}
+
+/* ---------- render sync ---------- */
+function render(now){
+  const p=G.p;let d;
+  if(p<.45)d=0;else if(p<.55)d=(p-.45)/.1;else if(p<.95)d=1;else d=1-(p-.95)/.05;
+  scene.background.lerpColors(skyDay,skyNight,d);scene.fog.color.copy(scene.background);
+  scene.fog.near=40-28*d;scene.fog.far=140-62*d;
+  hemi.intensity=1-.8*d;sun.intensity=1-.92*d;
+  sun.color.setHex(d>.3?0x6070ff:0xfff2d0);
+
+  // fire
+  const fl=1+Math.sin(now/90)*.12+Math.sin(now/37)*.06,burn=F.fuel>0;
+  flame1.visible=flame2.visible=burn;
+  const fs=1+F.lvl*.12;
+  flame1.scale.set(fs*fl,fs*(1.1-(fl-1)*.8),fs*fl);flame2.scale.set(fs*fl,fs,fs*fl);
+  fireLight.intensity=burn?(1.6+d*1.6)*fl:0;fireLight.distance=lightR()*1.4;
+  const sr=safeR();ring.visible=burn;ring.scale.set(sr,1,sr);
+
+  // player
+  pMesh.position.set(P.x,0,P.z);
+  pBody.rotation.y=Math.atan2(P.fx,P.fz);
+  const moving=Math.hypot(joy.x,joy.y)>.05||keys.w||keys.a||keys.s||keys.d;
+  pBody.position.y=moving?Math.abs(Math.sin(now/110))*.12:0;
+  arm.rotation.x=P.sw>0?-1.6+(1-P.sw/.25)*2.2:0;
+  // hit flash on player body is via overlay
+  $('flash').style.opacity=G.flash*1.4;
+
+  // enemies
+  for(const e of enemies){
+    e.root.position.set(e.x,0,e.z);
+    e.body.rotation.y=e.ry;e.body.position.y=Math.abs(Math.sin(now/100+e.x))*.12*e.r;
+    e.bar.quaternion.copy(camera.quaternion);
+    const r=Math.max(0,e.hp/e.max);e.fg.scale.x=Math.max(.001,r);e.fg.position.x=-(1-r)*.8;
+  }
+  // kids
+  for(const k of kids){k.mesh.position.set(k.x,k.st==='follow'?Math.abs(Math.sin(now/120))*.15:0,k.z)}
+  // trees
+  if(treesDirty){updateTrees();treesDirty=trees.some(t=>t.sh>0)}
+  for(const r of rocks)if(r.sh>0)r.mesh.position.x=r.x+Math.sin(r.sh*70)*.1;else r.mesh.position.x=r.x;
+
+  // camera
+  const dist_=W<H?13:10,cp=Math.cos(P.pitch),sp=Math.sin(P.pitch);
+  camera.position.set(P.x+Math.sin(P.yaw)*cp*dist_,sp*dist_+1,P.z+Math.cos(P.yaw)*cp*dist_);
+  camera.lookAt(P.x,1.6,P.z);
+
+  // floating text
+  for(const f of fts){
+    tmpV.set(f.x,f.y,f.z).project(camera);
+    if(tmpV.z>1){f.el.style.display='none';continue}
+    f.el.style.display='block';
+    f.el.style.transform=`translate(${(tmpV.x*.5+.5)*W}px,${(-tmpV.y*.5+.5)*H}px) translate(-50%,-50%)`;
+    f.el.style.opacity=Math.min(1,f.t);
+  }
+  renderer.render(scene,camera);
+}
+
+let hudT=0;
+function hud(){
+  const set=(id,v)=>$(id).firstElementChild.style.width=clamp(v,0,1)*100+'%';
+  set('hp',P.hp/P.max);set('hg',P.hunger/100);set('fu',F.fuel/maxFuel());
+  $('tm').firstElementChild.style.width=(G.p*100)+'%';
+  $('tl').textContent=(G.p>=.5?'🌙 밤':'☀️ 낮')+' · '+G.night+'번째';
+  $('nt').textContent=`생존한 밤 ${G.survived}/${WIN}`;
+  $('kd').textContent=`👧 구출 ${G.rescued} · 🗡${P.wl} 🪓${P.al} 🔥${F.lvl}`;
+  $('inv').innerHTML=`🪵 ${inv.wood} &nbsp;🪨 ${inv.stone}<br>🍖 ${inv.cooked}/${inv.raw} &nbsp;🍓 ${inv.berry}`;
+}
+
+newGame();
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(started){update(dt);hudT+=dt;if(hudT>.1){hudT=0;hud();if(menuOpen)buildMenu()}}
+  else{G.time+=dt*.5}
+  render(now);
+  requestAnimationFrame(loop);
+}
+$('start').onclick=()=>{$('ov').style.display='none';started=true;banner('☀️ 낮에 나무와 돌을 모으세요!')};
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
