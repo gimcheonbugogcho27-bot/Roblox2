@@ -1,11 +1,6 @@
-
 name = "blockworld-realtime"
 main = "src/index.js"
 compatibility_date = "2026-11-17"
-
-[vars]
-SUPABASE_URL = "https://vpxhuyhhjevmnrtrlfta.supabase.co"
-SUPABASE_ANON_KEY = "Supabase anon 키"
 
 [[durable_objects.bindings]]
 name = "ROOMS"
