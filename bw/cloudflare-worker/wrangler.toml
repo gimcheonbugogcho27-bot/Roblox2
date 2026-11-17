@@ -9,6 +9,3 @@ class_name = "RoomHub"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomHub"]
-[vars]
-SUPABASE_URL = "https://vpxhuyhhjevmnrtrlfta.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweGh1eWhoamV2bW5ydHJsZnRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzNDE5NzQsImV4cCI6MjEwOTkxNzk3NH0.7Qn7DhTRQeONOY3KDNVYc0OHfkA2sJ_JjFswA0nnL1I"
