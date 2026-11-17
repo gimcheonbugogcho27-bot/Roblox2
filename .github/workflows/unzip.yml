@@ -15,8 +15,14 @@ jobs:
       - name: Download repository
         uses: actions/checkout@v4
 
+      - name: Backup Wrangler configuration
+        run: cp bw/cloudflare-worker/wrangler.toml /tmp/wrangler.toml
+
       - name: Extract ZIP
         run: unzip -o BlockWorld-speed-v3-cloudflare-realtime.zip -d .
+
+      - name: Restore Wrangler configuration
+        run: cp /tmp/wrangler.toml bw/cloudflare-worker/wrangler.toml
 
       - name: Save extracted files
         run: |
