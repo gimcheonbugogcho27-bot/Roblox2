@@ -3,25 +3,53 @@ import './style.css';
 
 const SUPABASE_URL=import.meta.env.VITE_SUPABASE_URL||'';
 const SUPABASE_KEY=import.meta.env.VITE_SUPABASE_ANON_KEY||'';
-const REALTIME_URL=import.meta.env.VITE_REALTIME_URL||'';
 const $=id=>document.getElementById(id);
 
-class RealtimeChannel {
- constructor(roomName,meta,token){this.roomName=roomName;this.meta={...meta};this.token=token;this.state='closed';this.ws=null;this.handlers=[];this.presence={};this.closedByUser=false;this.retry=0;this.retryTimer=null}
- on(kind,opts,callback){this.handlers.push({kind,event:opts?.event,callback});return this}
- emit(kind,event,payload){for(const h of this.handlers)if(h.kind===kind&&(!h.event||h.event===event)){try{h.callback(kind==='broadcast'?{payload}:{event,state:payload})}catch(e){console.error(e)}}}
- presenceState(){return this.presence}
- connect(callback){if(!REALTIME_URL)throw new Error('Render 환경변수 VITE_REALTIME_URL에 Cloudflare Worker 주소를 설정하세요.');this.closedByUser=false;this.connectCallback=callback;this.openSocket();return this}
- openSocket(){const url=new URL(REALTIME_URL);if(url.protocol==='https:')url.protocol='wss:';else if(url.protocol==='http:')url.protocol='ws:';url.searchParams.set('room',this.roomName);url.searchParams.set('token',this.token);url.searchParams.set('userId',this.meta.userId||'');url.searchParams.set('id',this.meta.id||'');url.searchParams.set('name',this.meta.name||'플레이어');url.searchParams.set('game',this.meta.game||'');const ws=new WebSocket(url.toString());this.ws=ws;
-  ws.onopen=()=>{this.state='joined';this.retry=0;if(this.connectCallback)this.connectCallback('SUBSCRIBED');if(this.meta.id)ws.send(JSON.stringify({type:'track',payload:this.meta}))};
-  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.type==='presence'){this.presence=m.state||{};this.emit('presence','sync',this.presence)}else if(m.type==='broadcast')this.emit('broadcast',m.event,m.payload);else if(m.type==='error')console.warn('Realtime server:',m.message||'error')};
-  ws.onerror=()=>{};ws.onclose=()=>{this.state='closed';if(!this.closedByUser){const wait=Math.min(30000,1000*Math.pow(2,this.retry++));this.retryTimer=setTimeout(()=>this.openSocket(),wait)}}}
- async track(meta){this.meta={...this.meta,...meta};if(this.ws?.readyState===WebSocket.OPEN)this.ws.send(JSON.stringify({type:'track',payload:this.meta}));return 'ok'}
- async send(message){if(this.ws?.readyState!==WebSocket.OPEN)throw new Error('실시간 서버 연결이 끊어졌습니다.');this.ws.send(JSON.stringify(message));return 'ok'}
- close(){this.closedByUser=true;clearTimeout(this.retryTimer);this.state='closed';if(this.ws){this.ws.onclose=null;this.ws.close();this.ws=null}}
- subscribe(callback){this.connect(callback);return this}
+/*
+ * Supabase Realtime adapter
+ * 기존 코드에서 사용하던 on / subscribe / track / send /
+ * presenceState / close 인터페이스를 유지합니다.
+ */
+async function makeRealtimeChannel(roomName,meta){
+ const client=ensureClient();
+ const raw=client.channel(roomName,{
+  config:{
+   presence:{key:String(meta.id||'')},
+   broadcast:{ack:true,self:false}
+  }
+ });
+ const adapter={
+  raw,
+  state:'joining',
+  on(kind,opts,callback){
+   raw.on(kind,opts,callback);
+   return adapter;
+  },
+  presenceState(){
+   return raw.presenceState();
+  },
+  async track(nextMeta){
+   return raw.track({...meta,...nextMeta});
+  },
+  async send(message){
+   const result=await raw.send(message);
+   if(result==='error')throw new Error('Supabase Realtime 메시지 전송에 실패했습니다.');
+   return result;
+  },
+  subscribe(callback){
+   raw.subscribe(status=>{
+    adapter.state=status==='SUBSCRIBED'?'joined':status;
+    callback(status);
+   });
+   return adapter;
+  },
+  close(){
+   adapter.state='closed';
+   return client.removeChannel(raw);
+  }
+ };
+ return adapter;
 }
-async function makeRealtimeChannel(roomName,meta){const {data:{session},error}=await ensureClient().auth.getSession();if(error||!session?.access_token)throw new Error('실시간 연결용 로그인 토큰을 가져오지 못했습니다.');return new RealtimeChannel(roomName,meta,session.access_token)}
 
 const TITLES={speed:'스피드 키보드 탈출 3D · Ultimate Edition',egg:'계란 서리단',rivals:'RIVALS 3D',blockblast:'블록 블라스트',tower:'아무도 못 깨는 타워',forest99:'99 Nights in the Forest'};
 const STUDENT_IDS=['김예은','김윤솔','김재은','나헤지','박솔아','박주아','박준희','송지아','신다원','전소현','전시은','주예진','김규담','김성현','김지유','김헤준','박서한','박우준','신유찬','안재현','이서빈','이승운','이시우','장재훈','전지훈','정유재','안시후'];
@@ -57,7 +85,7 @@ async function applyCommand(row){if(!row||row.game!=='speed')return;const p=row.
  else if(row.command==='abuse_stop'){latestAbuse=null;if(currentGame==='speed')$('game-frame').contentWindow?.postMessage({type:'bw2:admin-abuse',active:false},'*')}
  else if(row.command==='reset_stats'&&row.target_user_id===authUser?.id){const reset=JSON.parse(JSON.stringify(DEFAULT_SPEED_SAVE));await persistSave(reset);if(currentGame==='speed')$('game-frame').contentWindow?.postMessage({type:'bw2:reset-stats',save:reset},'*');toast('관리자가 내 스탯을 초기화했습니다.')}
 }
-/* 전체 서버 연결 자동 복구: 끊기면 재연결 + 주기적으로 DB의 최신 상태와 맞춤 (끊긴 동안 놓친 어뷰즈/러닝머신 신호 복구) */
+/* 전체 서버 연결 자동 복구: 끊기면 재연결 + 주기적으로 DB의 최신 상태와 맞춤 */
 let globalWanted=false,globalRetry=0,globalRetryTimer=null,globalSyncTimer=null,globalSyncing=false;
 function scheduleGlobalReconnect(){
  if(globalRetryTimer||!globalWanted||!supabase)return;
@@ -85,7 +113,7 @@ async function syncGlobalState(){
   if(!ue){const sec=Number(u?.payload?.seconds)||0,end=u?new Date(u.created_at).getTime()+sec*1000:0,want=sec>0&&end>Date.now()-5*60000?{endsAt:end,text:String(u.payload?.text||'').slice(0,40)}:null;
    if(JSON.stringify(want)!==JSON.stringify(latestUpdate)){latestUpdate=want;post(updMsg(true))}}
   const {data:w,error:we}=await supabase.from('speed_game_commands').select('payload').eq('room_code','__GLOBAL__').eq('game','speed').eq('command','world_lock').order('created_at',{ascending:false}).limit(1).maybeSingle();
-  if(!we){const lk=(Array.isArray(w?.payload?.worlds)?w.payload.worlds:[]).map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<15);if(JSON.stringify(lk)!==JSON.stringify(latestLocks)){latestLocks=lk;post({type:'bw2:world-lock',worlds:lk,silent:true})}}
+  if(!we){const lk=(Array.isArray(w?.payload?.worlds)?w.payload.worlds:[]).map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<15);if(JSON.stringify(lk)!==JSON.stringify(latestLocks)){latestLocks=lk;post({type:'bw2:world-lock',worlds:latestLocks,silent:true})}}
  }catch(_){}
  finally{globalSyncing=false}
 }
@@ -113,8 +141,7 @@ async function sendAdminCommand(command,payload={},targetUserId=null){
  else if(channel)await channel.send({type:'broadcast',event:'command',payload:row});
 }
 async function joinRoom(){try{ensureClient();if(!authUser)throw new Error('먼저 계정 로그인 또는 회원가입을 해주세요.');
- if(!REALTIME_URL)throw new Error('Render 환경변수 VITE_REALTIME_URL에 Cloudflare Worker 주소를 설정해야 합니다.');
- const {data:adminRow,error:adminErr}=await supabase.from('speed_game_admins').select('user_id').eq('user_id',authUser.id).maybeSingle();if(adminErr)throw new Error('관리자 권한 확인 실패: '+adminErr.message);isAdmin=!!adminRow;
+  const {data:adminRow,error:adminErr}=await supabase.from('speed_game_admins').select('user_id').eq('user_id',authUser.id).maybeSingle();if(adminErr)throw new Error('관리자 권한 확인 실패: '+adminErr.message);isAdmin=!!adminRow;
  channel=await makeRealtimeChannel('lobby-'+room,{id:playerId,userId:authUser.id,name:playerName,game:''});
  channel.on('presence',{event:'sync'},updateCount);
  channel.on('broadcast',{event:'chat'},({payload})=>addChat(payload.name,payload.message));
@@ -122,7 +149,7 @@ async function joinRoom(){try{ensureClient();if(!authUser)throw new Error('먼�
  channel.on('broadcast',{event:'game'},({payload})=>{if(payload.id!==playerId)toast(payload.name+' 님이 '+(TITLES[payload.game]||'게임')+' 플레이를 시작했습니다.')});
  channel.on('broadcast',{event:'position'},({payload})=>{if(!payload||payload.id===playerId||payload.game!==currentGame)return;$('game-frame').contentWindow?.postMessage({type:'bw2:remote',player:payload},'*')});
  channel.on('broadcast',{event:'command'},({payload})=>{if(payload)applyCommand(payload)});
- await new Promise((resolve,reject)=>{let finished=false;const timer=setTimeout(()=>{if(!finished){finished=true;reject(new Error('연결 시간 초과'))}},12000);channel.subscribe(async status=>{if(status==='SUBSCRIBED'&&!finished){finished=true;clearTimeout(timer);await channel.track({id:playerId,userId:authUser.id,name:playerName,game:''});$('online-status').textContent='Cloudflare 실시간 연결됨';$('online-status').classList.add('online');resolve()}else if((status==='CHANNEL_ERROR'||status==='TIMED_OUT')&&!finished){finished=true;clearTimeout(timer);reject(new Error('Cloudflare 실시간 서버 연결 실패'))}})});
+ await new Promise((resolve,reject)=>{let finished=false;const timer=setTimeout(()=>{if(!finished){finished=true;reject(new Error('연결 시간 초과'))}},12000);channel.subscribe(async status=>{if(status==='SUBSCRIBED'&&!finished){finished=true;clearTimeout(timer);await channel.track({id:playerId,userId:authUser.id,name:playerName,game:''});$('online-status').textContent='Supabase 실시간 연결됨';$('online-status').classList.add('online');resolve()}else if((status==='CHANNEL_ERROR'||status==='TIMED_OUT')&&!finished){finished=true;clearTimeout(timer);reject(new Error('Supabase 실시간 채널 연결 실패'))}})});
  globalWanted=true;if(!globalSyncTimer)globalSyncTimer=setInterval(()=>{if(globalWanted&&document.visibilityState==='visible')checkGlobalNow()},15000);
  await ensureGlobalChannel();
  const {data:latest,error:latestError}=await supabase.from('speed_game_commands').select('*').eq('room_code','__GLOBAL__').eq('game','speed').in('command',['abuse_start','abuse_stop']).order('created_at',{ascending:false}).limit(1).maybeSingle();
@@ -155,9 +182,110 @@ function setAuthStatus(){ const displayName=authUser?.user_metadata?.display_nam
 $('auth-login').addEventListener('click',()=>authAction('login'));$('auth-signup').addEventListener('click',()=>authAction('signup'));$('platform-logout').addEventListener('click',async()=>{if(!supabase)return;await supabase.auth.signOut();authUser=null;isAdmin=false;if(channel){channel.close();channel=null}globalWanted=false;if(globalChannel){const old=globalChannel;globalChannel=null;old.close()}$('room-modal').classList.add('show');setAuthStatus();toast('플랫폼에서 로그아웃했습니다.')});
 if(SUPABASE_URL&&SUPABASE_KEY){supabase=createClient(SUPABASE_URL,SUPABASE_KEY);supabase.auth.getSession().then(({data})=>{authUser=data.session?.user||null;setAuthStatus()});supabase.auth.onAuthStateChange((_event,session)=>{authUser=session?.user||null;setAuthStatus()})}else{$('auth-error').textContent='Render 환경변수 VITE_SUPABASE_URL 및 VITE_SUPABASE_ANON_KEY를 설정해야 합니다.'}
 $('room-form').addEventListener('submit',async e=>{e.preventDefault();playerName=$('player-name').value.trim().slice(0,16)||'플레이어';room=$('room-code').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,16)||'CLASS4';$('room-error').textContent='';const btn=$('room-form').querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='연결 중...';const ok=await joinRoom();btn.disabled=false;btn.textContent='입장하기';if(!ok)return;$('player-label').textContent=playerName;$('room-name').textContent=room;$('room-modal').classList.remove('show');toast(room+' 월드에 접속했습니다.')});
+
 $('change-room').addEventListener('click',async()=>{if(channel){channel.close();channel=null}globalWanted=false;if(globalChannel){const old=globalChannel;globalChannel=null;old.close()}$('room-modal').classList.add('show');$('room-error').textContent=''});
-document.querySelectorAll('[data-game]').forEach(btn=>btn.addEventListener('click',()=>launchGame(btn.dataset.game)));$('back-games').addEventListener('click',backToGames);
-$('chat-form').addEventListener('submit',e=>{e.preventDefault();sendChat($('chat-input').value);$('chat-input').value=''});$('chat-toggle').addEventListener('click',()=>{const panel=$('chat-toggle').closest('.game-chat');panel.classList.toggle('collapsed');$('chat-toggle').textContent=panel.classList.contains('collapsed')?'+':'−'});
-window.addEventListener('message',async e=>{if(e.source!==$('game-frame').contentWindow||!e.data)return;const d=e.data;if(d.type==='bw2:return-to-lobby'&&currentGame==='speed'){toast('부정행위 감지로 게임 로비로 이동합니다.');try{await antiCheatApi('report',{reason:String(d.reason||'unknown').slice(0,48)})}catch(err){console.warn('anti-cheat report failed',err.message)}try{if(channel)channel.send({type:'broadcast',event:'anticheat',payload:{name:playerName,reason:String(d.reason||'').slice(0,30)}})}catch(_){}await backToGames();return}else if(d.type==='bw2:position'&&channel&&currentGame){const now=Date.now();if(now-lastPositionSent<90)return;lastPositionSent=now;await channel.send({type:'broadcast',event:'position',payload:{id:playerId,userId:authUser.id,name:playerName,game:currentGame,x:Number(d.x)||0,y:Number(d.y)||0,z:Number(d.z)||0,rotation:Number(d.rotation)||0}})}else if(d.type==='bw2:save'&&d.save){if(currentGame==='speed'){const sv=d.save,okNum=v=>v===undefined||(typeof v==='number'&&Number.isFinite(v)&&v>=0);if(['speed','coins','wins','rebirths','potions'].every(k=>okNum(sv[k])))queueSave(sv);else console.warn('비정상 저장 데이터 무시')}else if(PSAVE.includes(currentGame))persistPlatformSave(currentGame,d.save)}else if(d.type==='bw2:admin-abuse-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다.');if(d.active){const payload={stepMult:Math.max(1,Math.min(10000,Number(d.stepMult)||10)),winMult:Math.max(1,Math.min(10000,Number(d.winMult)||10)),durationSeconds:Math.max(1,Math.min(3600,Number(d.durationSeconds)||60))};await sendAdminCommand('abuse_start',payload)}else await sendAdminCommand('abuse_stop',{});toast('전체 플레이어에게 어뷰즈 설정을 전송했습니다.')}catch(err){toast(err.message)}}else if(d.type==='bw2:server-message-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다.');const text=String(d.text||'').trim().slice(0,80);if(!text)return;await ensureGlobalChannel();await globalChannel.send({type:'broadcast',event:'server-msg',payload:{text}});toast('📢 전체 서버에 메시지를 보냈습니다.')}catch(err){toast('메시지 전송 실패: '+err.message)}}else if(d.type==='bw2:cutscene-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다. (speed_game_admins에 등록된 계정만 가능)');const id=String(d.id||'').replace(/[^a-z0-9_]/gi,'').slice(0,20);if(!id)throw new Error('컷신 ID 오류');await sendAdminCommand('cutscene',{id});toast('전체 서버에 컷신을 보냈습니다.')}catch(err){toast(err.message)}}else if(d.type==='bw2:tread150-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다. (speed_game_admins에 등록된 계정만 가능)');await sendAdminCommand(d.active?'tread150_on':'tread150_off',{});toast(d.active?'전체 서버에 150x 러닝머신 컷신을 보냈습니다.':'전체 서버의 150x 러닝머신을 닫았습니다.')}catch(err){toast(err.message)}}else if(d.type==='bw2:update-notice-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다.');const m=Math.max(0,Math.min(1440,Math.floor(Number(d.minutes)||0)));await sendAdminCommand('update_notice',{seconds:m*60,text:String(d.text||'').trim().slice(0,40)});toast(m?'⏳ 전체 서버에 '+m+'분 뒤 업데이트 예고를 보냈습니다.':'⏳ 업데이트 예고를 취소했습니다.')}catch(err){toast(err.message)}}else if(d.type==='bw2:world-lock-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다.');const worlds=[...new Set((Array.isArray(d.worlds)?d.worlds:[]).map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<15))].sort((a,b)=>a-b);await sendAdminCommand('world_lock',{worlds});toast(worlds.length?'🔒 전체 서버 월드 잠금: '+worlds.map(i=>'W'+(i+1)).join(', '):'🔓 모든 월드를 열었습니다.')}catch(err){toast(err.message)}}else if(d.type==='bw2:admin-reset-request'&&currentGame==='speed'){try{if(!isAdmin)throw new Error('관리자 권한이 없습니다.');const target=String(d.targetUserId||'');if(!target)throw new Error('초기화할 플레이어를 선택하세요.');const reset=JSON.parse(JSON.stringify(DEFAULT_SPEED_SAVE));const {error}=await supabase.from('speed_game_saves').upsert({user_id:target,data:reset,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error)throw error;await supabase.from('speed_leaderboard').update({speed:0,level:1,wins:0,rebirths:0,updated_at:new Date().toISOString()}).eq('user_id',target);await sendAdminCommand('reset_stats',{},target);toast('선택한 플레이어의 스탯을 초기화했습니다.')}catch(err){toast(err.message)}}});
-window.addEventListener('beforeunload',()=>{if(channel)channel.close();if(globalChannel)globalChannel.close()});
-$('room-modal').classList.add('show');$('player-name').focus();
+
+document.querySelectorAll('[data-game]').forEach(btn=>btn.addEventListener('click',()=>launchGame(btn.dataset.game)));
+$('back-games').addEventListener('click',backToGames);
+
+$('chat-form').addEventListener('submit',e=>{e.preventDefault();sendChat($('chat-input').value);$('chat-input').value=''});
+$('chat-toggle').addEventListener('click',()=>{const panel=$('chat-toggle').closest('.game-chat');panel.classList.toggle('collapsed');$('chat-toggle').textContent=panel.classList.contains('collapsed')?'+':'−'});
+
+window.addEventListener('message',async e=>{
+ if(e.source!==$('game-frame').contentWindow||!e.data)return;
+ const d=e.data;
+
+ if(d.type==='bw2:return-to-lobby'&&currentGame==='speed'){
+  toast('부정행위 감지로 게임 로비로 이동합니다.');
+  try{await antiCheatApi('report',{reason:String(d.reason||'unknown').slice(0,48)})}catch(err){console.warn('anti-cheat report failed',err.message)}
+  try{if(channel)channel.send({type:'broadcast',event:'anticheat',payload:{name:playerName,reason:String(d.reason||'').slice(0,30)}})}catch(_){}
+  await backToGames();
+  return;
+
+ }else if(d.type==='bw2:position'&&channel&&currentGame){
+  const now=Date.now();
+  if(now-lastPositionSent<90)return;
+  lastPositionSent=now;
+  await channel.send({type:'broadcast',event:'position',payload:{id:playerId,userId:authUser.id,name:playerName,game:currentGame,x:Number(d.x)||0,y:Number(d.y)||0,z:Number(d.z)||0,rotation:Number(d.rotation)||0}});
+
+ }else if(d.type==='bw2:save'&&d.save){
+  if(currentGame==='speed'){
+   const sv=d.save,okNum=v=>v===undefined||(typeof v==='number'&&Number.isFinite(v)&&v>=0);
+   if(['speed','coins','wins','rebirths','potions'].every(k=>okNum(sv[k])))queueSave(sv);
+   else console.warn('비정상 저장 데이터 무시');
+  }else if(PSAVE.includes(currentGame))persistPlatformSave(currentGame,d.save);
+
+ }else if(d.type==='bw2:admin-abuse-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다.');
+   if(d.active){
+    const payload={stepMult:Math.max(1,Math.min(10000,Number(d.stepMult)||10)),winMult:Math.max(1,Math.min(10000,Number(d.winMult)||10)),durationSeconds:Math.max(1,Math.min(3600,Number(d.durationSeconds)||60))};
+    await sendAdminCommand('abuse_start',payload);
+   }else await sendAdminCommand('abuse_stop',{});
+   toast('전체 플레이어에게 어뷰즈 설정을 전송했습니다.');
+  }catch(err){toast(err.message)}
+
+ }else if(d.type==='bw2:server-message-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다.');
+   const text=String(d.text||'').trim().slice(0,80);
+   if(!text)return;
+   await ensureGlobalChannel();
+   await globalChannel.send({type:'broadcast',event:'server-msg',payload:{text}});
+   toast('📢 전체 서버에 메시지를 보냈습니다.');
+  }catch(err){toast('메시지 전송 실패: '+err.message)}
+
+ }else if(d.type==='bw2:cutscene-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다. (speed_game_admins에 등록된 계정만 가능)');
+   const id=String(d.id||'').replace(/[^a-z0-9_]/gi,'').slice(0,20);
+   if(!id)throw new Error('컷신 ID 오류');
+   await sendAdminCommand('cutscene',{id});
+   toast('전체 서버에 컷신을 보냈습니다.');
+  }catch(err){toast(err.message)}
+
+ }else if(d.type==='bw2:tread150-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다. (speed_game_admins에 등록된 계정만 가능)');
+   await sendAdminCommand(d.active?'tread150_on':'tread150_off',{});
+   toast(d.active?'전체 서버에 150x 러닝머신 컷신을 보냈습니다.':'전체 서버의 150x 러닝머신을 닫았습니다.');
+  }catch(err){toast(err.message)}
+
+ }else if(d.type==='bw2:update-notice-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다.');
+   const m=Math.max(0,Math.min(1440,Math.floor(Number(d.minutes)||0)));
+   await sendAdminCommand('update_notice',{seconds:m*60,text:String(d.text||'').trim().slice(0,40)});
+   toast(m?'⏳ 전체 서버에 '+m+'분 뒤 업데이트 예고를 보냈습니다.':'⏳ 업데이트 예고를 취소했습니다.');
+  }catch(err){toast(err.message)}
+
+ }else if(d.type==='bw2:world-lock-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다.');
+   const worlds=[...new Set((Array.isArray(d.worlds)?d.worlds:[]).map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<15))].sort((a,b)=>a-b);
+   await sendAdminCommand('world_lock',{worlds});
+   toast(worlds.length?'🔒 전체 서버 월드 잠금: '+worlds.map(i=>'W'+(i+1)).join(', '):'🔓 모든 월드를 열었습니다.');
+  }catch(err){toast(err.message)}
+
+ }else if(d.type==='bw2:admin-reset-request'&&currentGame==='speed'){
+  try{
+   if(!isAdmin)throw new Error('관리자 권한이 없습니다.');
+   const target=String(d.targetUserId||'');
+   if(!target)throw new Error('초기화할 플레이어를 선택하세요.');
+   const reset=JSON.parse(JSON.stringify(DEFAULT_SPEED_SAVE));
+   const {error}=await supabase.from('speed_game_saves').upsert({user_id:target,data:reset,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+   if(error)throw error;
+   await supabase.from('speed_leaderboard').update({speed:0,level:1,wins:0,rebirths:0,updated_at:new Date().toISOString()}).eq('user_id',target);
+   await sendAdminCommand('reset_stats',{},target);
+   toast('선택한 플레이어의 스탯을 초기화했습니다.');
+  }catch(err){toast(err.message)}
+ }
+});
+
+window.addEventListener('beforeunload',()=>{
+ if(channel)channel.close();
+ if(globalChannel)globalChannel.close();
+});
+
+$('room-modal').classList.add('show');
+$('player-name').focus();
